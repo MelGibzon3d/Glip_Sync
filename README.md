@@ -5,7 +5,7 @@ This custom `LipSyncBaker` tool allows you to instantly  map audio files into pe
 ---
 You will need https://github.com/DanielSWolf/rhubarb-lip-sync and point the Tool script to the rhubarb.exe for it to work
 ##  Quick Start (Auto-Generation)
-
+NB! after getting rhubarb add the .gdignore file to your rhubarb folder so godot doesn't try to import all the files in the rhubarb repository to the game engine.
 The easiest way to use the baker is to let it automatically run `rhubarb.exe` under the hood.
 
 1. **Clear the Rhubarb File Box:** Ensure the top box (`Rhubarb File`) is completely empty (click the revert/curly-arrow icon so it shows blank or `<null>`).
@@ -24,6 +24,7 @@ The easiest way to use the baker is to let it automatically run `rhubarb.exe` un
 
 ### 1. Manual Override
 * **Rhubarb File:** If you provide a `.txt` or `.json` file here, the script will **ignore the auto-generation process** entirely and bake the animation using the file you provided. Great for manual edits!
+
 
 ### 2. Rhubarb Auto-Generation
 * **Rhubarb Executable Path:** Points to `rhubarb.exe` on your machine.
