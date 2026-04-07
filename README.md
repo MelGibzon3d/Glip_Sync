@@ -1,10 +1,10 @@
 # Godot Rhubarb Lip Sync Baker - User Guide
 
 This custom `LipSyncBaker` tool allows you to instantly  map audio files into perfectly timed mouth animations natively inside Godot 4, either by parsing pre-generated Rhubarb files or by letting Godot automatically run Rhubarb in the background!
-
+You will need https://github.com/DanielSWolf/rhubarb-lip-sync and point the Tool script to the rhubarb.exe for it to work
 ---
 
-## 🚀 Quick Start (Auto-Generation)
+##  Quick Start (Auto-Generation)
 
 The easiest way to use the baker is to let it automatically run `rhubarb.exe` under the hood.
 
@@ -20,7 +20,7 @@ The easiest way to use the baker is to let it automatically run `rhubarb.exe` un
 
 ---
 
-## ⚙️ Inspector Settings Breakdown
+##  Inspector Settings Breakdown
 
 ### 1. Manual Override
 * **Rhubarb File:** If you provide a `.txt` or `.json` file here, the script will **ignore the auto-generation process** entirely and bake the animation using the file you provided. Great for manual edits!
