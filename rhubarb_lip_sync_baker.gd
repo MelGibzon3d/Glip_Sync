@@ -26,6 +26,8 @@ enum RhubarbRecognizer {POCKET_SPHINX, PHONETIC}
 @export_global_file("*.exe", "*.app", "*.exe") var rhubarb_executable_path: String = ""
 ## How Rhubarb analyzes sound. Use POCKET_SPHINX for English, or PHONETIC for sounds/non-English.
 @export var recognizer: RhubarbRecognizer = RhubarbRecognizer.POCKET_SPHINX
+## Optional: Custom name for the generated JSON file (e.g. 'Scene1.json'). If empty, uses audio filename.
+@export var rhubarb_output_name: String = ""
 ## Optional: If you want to physically save the JSON that Rhubarb generates, specify an output folder.
 @export_global_dir var rhubarb_save_directory: String = ""
 @export_group("")
@@ -35,9 +37,9 @@ enum RhubarbRecognizer {POCKET_SPHINX, PHONETIC}
 
 @export_group("Viseme Mapping")
 ## Closed mouth (M, B, P consonants)
-@export var map_A: String = "X"
+@export var map_A: String = "A"
 ## Slightly open mouth (K, S, T consonants)
-@export var map_B: String = "C"
+@export var map_B: String = "B"
 ## Open mouth (Aa, Eh vowels)
 @export var map_C: String = "C"
 ## Wide open mouth (Ah vowels)
@@ -47,9 +49,9 @@ enum RhubarbRecognizer {POCKET_SPHINX, PHONETIC}
 ## Puckered lips (W, Q, R consonants)
 @export var map_F: String = "F"
 ## Upper teeth visible (F, V consonants)
-@export var map_G: String = "E"
+@export var map_G: String = "G"
 ## Very wide open mouth (L, Th consonants - optional)
-@export var map_H: String = "C"
+@export var map_H: String = "H"
 ## Silence / Idle (Mouth closed completely)
 @export var map_X: String = "X"
 @export_group("")
@@ -67,7 +69,10 @@ enum BlendMode {BY_RATIO, FIXED_TIME}
 
 ## Blending mode for crossfades.
 ## 'BY_RATIO' mimics Blender Rhubarb "In Out Blend Type: By ratio".
-@export var blend_mode: BlendMode = BlendMode.BY_RATIO
+@export var blend_mode: BlendMode = BlendMode.BY_RATIO:
+	set(v):
+		blend_mode = v
+		notify_property_list_changed()
 
 ## Ratio for BY_RATIO mode. 0.50 means the crossfade takes 50% of the duration
 ## of the preceding viseme. This acts proportionally and keeps mouth movement smooth.
@@ -76,6 +81,12 @@ enum BlendMode {BY_RATIO, FIXED_TIME}
 ## Duration (seconds) for FIXED_TIME mode.
 ## Larger = smoother / mushier; smaller = snappier.
 @export_range(0.01, 0.3, 0.01) var fixed_blend_time: float = 0.07
+
+func _validate_property(property: Dictionary):
+	if property.name == "blend_ratio" and blend_mode != BlendMode.BY_RATIO:
+		property.usage = PROPERTY_USAGE_NO_EDITOR
+	if property.name == "fixed_blend_time" and blend_mode != BlendMode.FIXED_TIME:
+		property.usage = PROPERTY_USAGE_NO_EDITOR
 
 ## Name for the generated animation inside the AnimationPlayer library
 @export var animation_name: String = "lip_sync"
@@ -124,11 +135,20 @@ func _bake_animation() -> void:
 		# Define output file path
 		var save_path: String = ""
 		var is_temp: bool = false
+		
+		var target_filename = project_name_to_json(rhubarb_output_name)
+		if target_filename == "":
+			target_filename = audio_stream.resource_path.get_file().get_basename() + ".json"
+		
 		if rhubarb_save_directory != "":
-			save_path = ProjectSettings.globalize_path(rhubarb_save_directory).path_join(audio_stream.resource_path.get_file().get_basename() + ".json")
+			var base_dir = rhubarb_save_directory
+			if base_dir.begins_with("res://") or base_dir.begins_with("user://"):
+				base_dir = ProjectSettings.globalize_path(base_dir)
+			save_path = base_dir.path_join(target_filename)
 		else:
-			save_path = ProjectSettings.globalize_path("user://temp_rhubarb_sync.json")
-			is_temp = true
+			save_path = ProjectSettings.globalize_path("user://").path_join(target_filename)
+			if rhubarb_output_name == "": # Only treat as temp if no name provided
+				is_temp = true
 			
 		var rhubarb_dir = os_exe_path.get_base_dir()
 		var output: Array = []
@@ -137,7 +157,13 @@ func _bake_animation() -> void:
 		# Rhubarb requires its working directory to access /res/sphinx. 
 		# We must use a shell to switch directory before executing.
 		var rec_str = "pocketSphinx" if recognizer == RhubarbRecognizer.POCKET_SPHINX else "phonetic"
-		print("RhubarbBaker: Executing Rhubarb securely (using %s recognizer)..." % rec_str)
+		
+		print("--- RhubarbBaker: Starting Auto-Generation ---")
+		print("Audio Path: ", os_audio_path)
+		print("Exe Path: ", os_exe_path)
+		print("Output JSON: ", save_path)
+		print("Recognizer: ", rec_str)
+		
 		if OS.get_name() == "Windows":
 			var cmd_str = "cd /d \"%s\" && \"%s\" -q -r %s -f json -o \"%s\" \"%s\"" % [rhubarb_dir, os_exe_path, rec_str, save_path, os_audio_path]
 			err = OS.execute("cmd.exe", ["/c", cmd_str], output, true)
@@ -160,7 +186,8 @@ func _bake_animation() -> void:
 		if is_temp:
 			DirAccess.remove_absolute(save_path)
 		else:
-			print("RhubarbBaker: Saved generated JSON purely for backup to ", save_path)
+			print("RhubarbBaker: Success! JSON generated at: ", save_path)
+			rhubarb_file = ProjectSettings.localize_path(save_path)
 
 		var json = JSON.new()
 		if json.parse(json_str) != OK:
@@ -331,18 +358,21 @@ func _bake_animation() -> void:
 				var t_next_next = merged_keys[i + 2].time if i + 2 < merged_keys.size() else t_next + 0.5
 				D = t_next + (t_next_next - t_next) * blend_ratio
 		else:
-			# FIXED_TIME Mode: legacy fixed crossfade
+			# FIXED_TIME Mode: Snappy crossfade
 			var fade = fixed_blend_time
 			if i == 0 or (merged_keys[i - 1].viseme == "" or merged_keys[i - 1].viseme == "X"):
 				A = t_i
 			else:
+				# Start fading in from the previous viseme's peak time
 				A = max(t_i - fade, merged_keys[i - 1].time)
+			
 			M_start = t_i
 			
 			if i == merged_keys.size() - 1 or (merged_keys[i + 1].viseme == "" or merged_keys[i + 1].viseme == "X"):
 				M_end = t_next
-				D = t_next + 0.15
+				D = t_next + fade
 			else:
+				# Hold until the fade out for the next viseme needs to begin
 				M_end = max(t_next - fade, t_i)
 				D = t_next
 
@@ -487,3 +517,10 @@ func _parse_tsv_file(path: String) -> Array[VisemeKey]:
 		result.append(VisemeKey.new(time_str.to_float(), viseme_str))
 
 	return result
+
+
+func project_name_to_json(n: String) -> String:
+	if n == "": return ""
+	if not n.ends_with(".json"):
+		return n + ".json"
+	return n
